@@ -94,6 +94,12 @@ export class Graph3DView extends ItemView {
 
   private pressedKeys = new Set<string>();
 
+  private idleRotateFrame: number | null = null;
+  private lastIdleRotateTime = 0;
+  private lastInteractionTime = 0;
+  private readonly IDLE_ROTATE_DELAY = 3000;
+  private idleRotateOffset = new THREE.Vector3();
+
   private fileContentCache = new Map<
     string,
     { mtime: number; content: string; lowerCaseContent: string }
@@ -606,6 +612,24 @@ export class Graph3DView extends ItemView {
         }),
     );
 
+    new Setting(container).setName("Auto-rotate when idle").addToggle((toggle) =>
+      toggle.setValue(this.settings.idleRotate).onChange(async (value) => {
+        this.settings.idleRotate = value;
+        await this.plugin.saveSettings();
+      }),
+    );
+
+    new Setting(container).setName("Auto-rotate speed (deg/s)").addSlider((s) =>
+      s
+        .setLimits(1, 30, 1)
+        .setValue(this.settings.idleRotateSpeed)
+        .setDynamicTooltip()
+        .onChange(async (v) => {
+          this.settings.idleRotateSpeed = v;
+          await this.plugin.saveSettings();
+        }),
+    );
+
     new Setting(container).setName("Pan speed").addSlider((s) =>
       s
         .setLimits(0.1, 5, 0.1)
@@ -872,6 +896,26 @@ export class Graph3DView extends ItemView {
     });
   }
 
+  private idleRotateStep = (now: number) => {
+    this.idleRotateFrame = requestAnimationFrame(this.idleRotateStep);
+    const dt = Math.min((now - this.lastIdleRotateTime) / 1000, 0.1);
+    this.lastIdleRotateTime = now;
+
+    if (!this.settings.idleRotate || !this.graph || !this.isGraphInitialized) return;
+    if (document.hidden || !this.graphContainer.isShown()) return;
+    if (now - this.lastInteractionTime < this.IDLE_ROTATE_DELAY) return;
+
+    const camera = this.graph.camera();
+    const controls = this.graph.controls();
+    if (!camera || !controls) return;
+
+    const angle = THREE.MathUtils.degToRad(this.settings.idleRotateSpeed) * dt;
+    this.idleRotateOffset.copy(camera.position).sub(controls.target);
+    this.idleRotateOffset.applyAxisAngle(camera.up, angle);
+    camera.position.copy(controls.target).add(this.idleRotateOffset);
+    camera.lookAt(controls.target);
+  };
+
   private isIndexHub(node: GraphNode): boolean {
     return (
       node.type === NodeType.File &&
@@ -895,6 +939,29 @@ export class Graph3DView extends ItemView {
     if (this.currentPositions.length >= this.currentNodes.length * stride) {
       this.instancedRenderer.updatePositions(this.currentPositions);
       this.updateLabels();
+    }
+  }
+
+  private startIdleRotation() {
+    if (this.idleRotateFrame !== null) return;
+    const markInteraction = () => {
+      this.lastInteractionTime = performance.now();
+    };
+    this.registerDomEvent(this.graphContainer, "pointerdown", markInteraction);
+    this.registerDomEvent(this.graphContainer, "wheel", markInteraction);
+    // A long drag must not count as idle.
+    this.registerDomEvent(this.graphContainer, "pointermove", (e) => {
+      if (e.buttons) markInteraction();
+    });
+    this.registerDomEvent(this.graphContainer, "keydown", markInteraction);
+    this.lastInteractionTime = performance.now();
+    this.idleRotateFrame = requestAnimationFrame(this.idleRotateStep);
+  }
+
+  private stopIdleRotation() {
+    if (this.idleRotateFrame !== null) {
+      cancelAnimationFrame(this.idleRotateFrame);
+      this.idleRotateFrame = null;
     }
   }
 
@@ -922,6 +989,7 @@ export class Graph3DView extends ItemView {
       this.initializeForces();
       this.graph.pauseAnimation();
       this.isGraphInitialized = true;
+      this.startIdleRotation();
 
       setTimeout(() => {
         this.updateData({ isFirstLoad: true });
@@ -1945,6 +2013,7 @@ export class Graph3DView extends ItemView {
   }
 
   async onClose() {
+    this.stopIdleRotation();
     this.physicsBridge.dispose();
     if (this.clickTimeout) clearTimeout(this.clickTimeout);
     this.resizeObserver?.disconnect();

@@ -56,6 +56,8 @@ export interface Graph3DPluginSettings {
   rotateSpeed: number;
   panSpeed: number;
   zoomSpeed: number;
+  idleRotate: boolean;
+  idleRotateSpeed: number;
   hideIndexHub: boolean;
   indexHubName: string;
   performanceMode: boolean;
@@ -104,6 +106,8 @@ export const DEFAULT_SETTINGS: Graph3DPluginSettings = {
   rotateSpeed: 1.0,
   panSpeed: 1.0,
   zoomSpeed: 1.0,
+  idleRotate: false,
+  idleRotateSpeed: 6,
   hideIndexHub: false,
   indexHubName: "index",
   centerForce: 0.1,
