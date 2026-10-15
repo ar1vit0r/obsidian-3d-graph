@@ -112,6 +112,7 @@ export class InstancedGraphRenderer {
     this.nodeCount = nodes.length;
     this.edges = edges;
     this.defaultLinkColor = hexToRgb01(defaultLinkHex);
+    this.hiddenFlags = new Uint8Array(this.nodeCount);
 
     if (this.nodeCount === 0) return;
 
@@ -254,6 +255,26 @@ export class InstancedGraphRenderer {
     }
   }
 
+  private hiddenFlags = new Uint8Array(0);
+
+  /** Hide nodes (and their edges) in place, without rebuilding or re-laying out the graph. */
+  public setHiddenNodes(hidden: ReadonlySet<number>): void {
+    if (this.nodeCount === 0) return;
+    this.hiddenFlags = new Uint8Array(this.nodeCount);
+    hidden.forEach((i) => {
+      if (i >= 0 && i < this.nodeCount) this.hiddenFlags[i] = 1;
+    });
+
+    for (const bucket of this.shapeBuckets.values()) {
+      if (!bucket.scaleAttr) continue;
+      const scales = bucket.scaleAttr.array as Float32Array;
+      bucket.indices.forEach((globalIdx, localIdx) => {
+        scales[localIdx] = this.hiddenFlags[globalIdx] ? 0 : this.nodeScales[globalIdx];
+      });
+      bucket.scaleAttr.needsUpdate = true;
+    }
+  }
+
   public updatePositions(positions: Float32Array): void {
     if (this.nodeCount === 0) return;
 
@@ -284,8 +305,11 @@ export class InstancedGraphRenderer {
       const edgeCount = ib.length >> 1;
 
       for (let e = 0, lBase = 0; e < edgeCount; e++, lBase += 6) {
-        const srcBase = ib[e * 2] * stride;
-        const tgtBase = ib[e * 2 + 1] * stride;
+        const srcIdx = ib[e * 2];
+        const tgtIdx = ib[e * 2 + 1];
+        const srcBase = srcIdx * stride;
+        // A hidden endpoint collapses the edge to a zero-length segment.
+        const tgtBase = this.hiddenFlags[srcIdx] || this.hiddenFlags[tgtIdx] ? srcBase : tgtIdx * stride;
         lp[lBase] = positions[srcBase];
         lp[lBase + 1] = positions[srcBase + 1];
         lp[lBase + 2] = positions[srcBase + 2];
@@ -381,6 +405,7 @@ export class InstancedGraphRenderer {
     let closestIdx: number | null = null;
 
     for (let i = 0; i < this.nodeCount; i++) {
+      if (this.hiddenFlags[i]) continue;
       const base = i * stride;
       const sx = positions[base];
       const sy = positions[base + 1];
@@ -438,7 +463,7 @@ export class InstancedGraphRenderer {
         }
 
         const currentScale = scales[localIdx];
-        const targetScale = inside ? this.nodeScales[globalIdx] : 0.0;
+        const targetScale = inside && !this.hiddenFlags[globalIdx] ? this.nodeScales[globalIdx] : 0.0;
         if (currentScale !== targetScale) {
           scales[localIdx] = targetScale;
           bucket.scaleAttr.needsUpdate = true;

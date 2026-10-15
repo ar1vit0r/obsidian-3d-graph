@@ -40,6 +40,7 @@
 }
 
 .graph-3d-settings-toggle,
+.graph-3d-hub-toggle,
 .graph-3d-reset-toggle {
 	cursor: pointer;
 	padding: 8px;
@@ -52,8 +53,13 @@
 }
 
 .graph-3d-settings-toggle:hover,
+.graph-3d-hub-toggle:hover,
 .graph-3d-reset-toggle:hover {
 	background-color: var(--background-modifier-hover);
+}
+
+.graph-3d-hub-toggle.is-active {
+	color: var(--text-accent);
 }
 
 .graph-3d-settings-panel {

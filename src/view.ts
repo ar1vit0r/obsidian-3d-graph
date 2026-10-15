@@ -243,6 +243,26 @@ export class Graph3DView extends ItemView {
       }
     });
 
+    const hubButton = controlsContainer.createEl("div", {
+      cls: "graph-3d-hub-toggle",
+    });
+    const syncHubButton = () => {
+      const hidden = this.settings.hideIndexHub;
+      setIcon(hubButton, hidden ? "eye-off" : "eye");
+      hubButton.setAttribute(
+        "aria-label",
+        hidden ? "Show index hub" : `Hide index hub ("${this.settings.indexHubName}")`,
+      );
+      hubButton.toggleClass("is-active", hidden);
+    };
+    syncHubButton();
+    hubButton.addEventListener("click", async () => {
+      this.settings.hideIndexHub = !this.settings.hideIndexHub;
+      await this.plugin.saveSettings();
+      syncHubButton();
+      this.applyHubVisibility();
+    });
+
     this.settingsToggleButton = controlsContainer.createEl("div", {
       cls: "graph-3d-settings-toggle",
     });
@@ -852,6 +872,32 @@ export class Graph3DView extends ItemView {
     });
   }
 
+  private isIndexHub(node: GraphNode): boolean {
+    return (
+      node.type === NodeType.File &&
+      Boolean(this.settings.indexHubName) &&
+      node.name.toLowerCase() === this.settings.indexHubName.toLowerCase()
+    );
+  }
+
+  /** Hide or show the index hub in place: the layout is never recomputed. */
+  private applyHubVisibility() {
+    if (!this.instancedRenderer) return;
+    const hidden = new Set<number>();
+    if (this.settings.hideIndexHub) {
+      this.currentNodes.forEach((node, i) => {
+        if (this.isIndexHub(node)) hidden.add(i);
+      });
+    }
+    this.instancedRenderer.setHiddenNodes(hidden);
+    this.labelRenderer?.setHiddenNodes(hidden);
+    const stride = this.physicsBridge.positionsStride;
+    if (this.currentPositions.length >= this.currentNodes.length * stride) {
+      this.instancedRenderer.updatePositions(this.currentPositions);
+      this.updateLabels();
+    }
+  }
+
   initializeGraph() {
     this.app.workspace.onLayoutReady(async () => {
       if (!this.graphContainer) return;
@@ -1056,6 +1102,7 @@ export class Graph3DView extends ItemView {
             0.6,
           );
           this.labelRenderer?.initLabels(newData.nodes, this.settings, 4);
+          this.applyHubVisibility();
 
           this.updateForces();
           this.updateDisplay();

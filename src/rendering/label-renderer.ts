@@ -82,6 +82,12 @@ export class InstancedLabelRenderer {
 
   private labels: LabelItem[] = [];
   private labelCount = 0;
+  private hiddenLabels: ReadonlySet<number> = new Set();
+
+  /** Suppress labels of nodes that are hidden in place. */
+  public setHiddenNodes(hidden: ReadonlySet<number>): void {
+    this.hiddenLabels = hidden;
+  }
   private positionsStride: 4 | 3 = 4;
 
   // Frustum & raycast occlusion reusable objects
@@ -414,6 +420,11 @@ export class InstancedLabelRenderer {
       trans[dst + 1] = y;
       trans[dst + 2] = z;
 
+      if (this.hiddenLabels.has(i)) {
+        opacities[i] = 0.0;
+        continue;
+      }
+
       if (hoverOnly) {
         const isHovered = hoveredNodeId !== null && label.id === hoveredNodeId;
         const isHighlighted = highlightedNodeIds.has(label.id);
@@ -450,7 +461,7 @@ export class InstancedLabelRenderer {
         let occluded = false;
         // Test against candidate nodes
         for (let j = 0; j < this.labelCount; j++) {
-          if (j === i) continue;
+          if (j === i || this.hiddenLabels.has(j)) continue;
           const otherSrc = j * stride;
           const ox = positions[otherSrc] - camPos.x;
           const oy = positions[otherSrc + 1] - camPos.y;
