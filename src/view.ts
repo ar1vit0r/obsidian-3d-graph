@@ -1315,7 +1315,8 @@ export class Graph3DView extends ItemView {
 
               // Settle the layout in one batch before animating, so the first
               // rendered frame is already calm instead of an explosion.
-              const warmupSteps = Math.min(300, Math.max(30, Math.floor(60000 / newData.nodes.length)));
+              // step_n stops early once converged, so the cap only bounds work on huge graphs.
+              const warmupSteps = Math.min(20000, Math.max(30, Math.floor(2000000 / newData.nodes.length)));
               let warmedUp = false;
               this.physicsBridge.onTick(() => {
                 if (warmedUp) return;
