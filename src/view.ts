@@ -98,6 +98,7 @@ export class Graph3DView extends ItemView {
   private lastIdleRotateTime = 0;
   private lastInteractionTime = 0;
   private readonly IDLE_ROTATE_DELAY = 3000;
+  private cameraFitted = false;
   private idleRotateOffset = new THREE.Vector3();
 
   private fileContentCache = new Map<
@@ -245,7 +246,9 @@ export class Graph3DView extends ItemView {
     resetViewButton.setAttribute("aria-label", "Reset view");
     resetViewButton.addEventListener("click", () => {
       if (this.graph && this.isGraphInitialized) {
-        this.graph.zoomToFit(800);
+        // currentPositions is only filled by the WASM engine.
+        if (this.settings.useWasmPhysics) this.fitCameraToLayout(800);
+        else this.graph.zoomToFit(800);
       }
     });
 
@@ -924,6 +927,64 @@ export class Graph3DView extends ItemView {
     );
   }
 
+  /**
+   * Frame the physics layout. The library places the camera from a heuristic
+   * (cbrt(nodeCount) * 170) tuned for its own D3 layout, which leaves the WASM
+   * layout tiny and far away, and zoomToFit reads D3 coordinates that the WASM
+   * engine never updates. Fit the bounding sphere of the visible nodes instead.
+   */
+  private fitCameraToLayout(transitionMs = 0) {
+    const stride = this.physicsBridge.positionsStride;
+    const pos = this.currentPositions;
+    const nodes = this.currentNodes;
+    if (!this.graph || !this.isGraphInitialized) return;
+    if (nodes.length === 0 || pos.length < nodes.length * stride) return;
+
+    const skipHub = this.settings.hideIndexHub;
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      if (skipHub && this.isIndexHub(nodes[i])) continue;
+      const o = i * stride;
+      if (!Number.isFinite(pos[o]) || !Number.isFinite(pos[o + 1]) || !Number.isFinite(pos[o + 2])) continue;
+      cx += pos[o];
+      cy += pos[o + 1];
+      cz += pos[o + 2];
+      count++;
+    }
+    if (count === 0) return;
+    cx /= count;
+    cy /= count;
+    cz /= count;
+
+    let radius = 1;
+    for (let i = 0; i < nodes.length; i++) {
+      if (skipHub && this.isIndexHub(nodes[i])) continue;
+      const o = i * stride;
+      if (!Number.isFinite(pos[o]) || !Number.isFinite(pos[o + 1]) || !Number.isFinite(pos[o + 2])) continue;
+      radius = Math.max(radius, Math.hypot(pos[o] - cx, pos[o + 1] - cy, pos[o + 2] - cz));
+    }
+
+    const camera = this.graph.camera() as THREE.PerspectiveCamera;
+    const vHalf = THREE.MathUtils.degToRad((camera.fov || 50) / 2);
+    const hHalf = Math.atan(Math.tan(vHalf) * (camera.aspect || 1));
+    const distance = (radius * 1.15) / Math.sin(Math.min(vHalf, hHalf));
+
+    // Keep the current viewing direction (+z on first load).
+    const target = this.graph.controls()?.target ?? new THREE.Vector3();
+    const dir = new THREE.Vector3().subVectors(camera.position, target);
+    if (dir.lengthSq() < 1e-6 || !Number.isFinite(dir.lengthSq())) dir.set(0, 0, 1);
+    dir.normalize();
+
+    this.graph.cameraPosition(
+      { x: cx + dir.x * distance, y: cy + dir.y * distance, z: cz + dir.z * distance },
+      { x: cx, y: cy, z: cz },
+      transitionMs,
+    );
+  }
+
   /** Hide or show the index hub in place: the layout is never recomputed. */
   private applyHubVisibility() {
     if (!this.instancedRenderer) return;
@@ -1251,7 +1312,25 @@ export class Graph3DView extends ItemView {
                 }
                 this.handleKeyboardMovement();
               });
-              this.physicsBridge.start();
+
+              // Settle the layout in one batch before animating, so the first
+              // rendered frame is already calm instead of an explosion.
+              const warmupSteps = Math.min(300, Math.max(30, Math.floor(60000 / newData.nodes.length)));
+              let warmedUp = false;
+              this.physicsBridge.onTick(() => {
+                if (warmedUp) return;
+                warmedUp = true;
+                try {
+                  if (!this.cameraFitted) {
+                    this.cameraFitted = true;
+                    this.fitCameraToLayout(0);
+                  }
+                } catch (e) {
+                  console.error("[3D Graph] Failed to frame the camera:", e);
+                }
+                queueMicrotask(() => this.physicsBridge.start());
+              });
+              this.physicsBridge.step(warmupSteps);
             })
             .catch((err) => {
               console.error(
