@@ -397,7 +397,7 @@ export class Graph3DSettingsTab extends PluginSettingTab {
         this.triggerUpdate({ updateDisplay: true });
       }),
     );
-    new Setting(containerEl).setName("Show labels on hover/highlight only").addToggle((toggle) =>
+    new Setting(containerEl).setName("Show labels on hover/selection only").addToggle((toggle) =>
       toggle.setValue(this.plugin.settings.showLabelsOnHoverOnly).onChange(async (value) => {
         this.plugin.settings.showLabelsOnHoverOnly = value;
         await this.plugin.saveSettings();

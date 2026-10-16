@@ -370,7 +370,7 @@ export class InstancedLabelRenderer {
     this.scene.add(this.instancedMesh);
   }
 
-  /** Toolbar toggle: when false, only the focused (hovered or selected) title is drawn. */
+  /** Toolbar toggle: when false, only the hovered and selected titles are drawn. */
   public showAllLabels = false;
 
   public updateVisibilityAndOcclusion(
@@ -378,6 +378,7 @@ export class InstancedLabelRenderer {
     positions: Float32Array,
     settings: Graph3DPluginSettings,
     hoveredNodeId: string | null = null,
+    selectedNodeId: string | null = null,
   ): void {
     if (
       !this.opacityAttr ||
@@ -428,7 +429,7 @@ export class InstancedLabelRenderer {
       }
 
       if (hoverOnly) {
-        if (hoveredNodeId === null || label.id !== hoveredNodeId) {
+        if (label.id !== hoveredNodeId && label.id !== selectedNodeId) {
           opacities[i] = 0.0;
           continue;
         }

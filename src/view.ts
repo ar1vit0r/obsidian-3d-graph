@@ -572,7 +572,7 @@ export class Graph3DView extends ItemView {
   private renderLabelSettings(container: HTMLElement) {
     new Setting(container).setHeading().setName("Labels");
 
-    new Setting(container).setName("Show labels on hover/highlight only").addToggle((toggle) =>
+    new Setting(container).setName("Show labels on hover/selection only").addToggle((toggle) =>
       toggle.setValue(this.settings.showLabelsOnHoverOnly).onChange(async (value) => {
         this.settings.showLabelsOnHoverOnly = value;
         await this.plugin.saveSettings();
@@ -1317,7 +1317,8 @@ export class Graph3DView extends ItemView {
                     this.graph.camera(),
                     positions,
                     this.settings,
-                    this.hoveredNode?.id ?? this.selectedNode,
+                    this.hoveredNode?.id ?? null,
+                    this.selectedNode,
                   );
                 }
                 this.handleKeyboardMovement();
@@ -1423,7 +1424,8 @@ export class Graph3DView extends ItemView {
         this.graph.camera(),
         this.currentPositions,
         this.settings,
-        this.hoveredNode?.id ?? this.selectedNode,
+        this.hoveredNode?.id ?? null,
+        this.selectedNode,
       );
     }
   }
@@ -1691,7 +1693,8 @@ export class Graph3DView extends ItemView {
       camera,
       this.currentPositions,
       this.settings,
-      this.hoveredNode?.id ?? this.selectedNode,
+      this.hoveredNode?.id ?? null,
+      this.selectedNode,
     );
   }
 
@@ -1834,7 +1837,8 @@ export class Graph3DView extends ItemView {
         this.graph.camera(),
         this.currentPositions,
         this.settings,
-        this.hoveredNode?.id ?? this.selectedNode,
+        this.hoveredNode?.id ?? null,
+        this.selectedNode,
       );
     }
 
