@@ -177,3 +177,39 @@
 .graph-3d-counter.is-visible {
 	display: block;
 }
+
+.graph-3d-legend {
+	position: absolute;
+	bottom: 40px;
+	left: 10px;
+	background-color: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 6px 8px;
+	font-size: var(--font-xs);
+	color: var(--text-muted);
+	z-index: 10;
+	pointer-events: none;
+	display: none;
+}
+
+.graph-3d-legend.is-visible {
+	display: block;
+}
+
+.graph-3d-legend-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.graph-3d-legend-swatch {
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+}
+
+.graph-3d-legend-swatch.is-other {
+	background-color: var(--text-faint);
+}

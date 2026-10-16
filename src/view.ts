@@ -3,6 +3,7 @@ import {
   debounce,
   getAllTags,
   ItemView,
+  Notice,
   Setting,
   setIcon,
   TFile,
@@ -16,6 +17,7 @@ import { InstancedGraphRenderer } from "./rendering/graph-renderer";
 import { InstancedLabelRenderer } from "./rendering/label-renderer";
 import {
   ColorGroup,
+  type ColorBy,
   type Filter,
   type Graph3DPluginSettings,
   type GraphLink,
@@ -25,6 +27,21 @@ import {
 } from "./types";
 
 export const VIEW_TYPE_3D_GRAPH = "3d-graph-view";
+
+// Eight muted, well-separated hues: the legend and the cap both use this list.
+const COLOR_BY_HUES = [10, 45, 95, 150, 190, 225, 270, 320];
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100;
+  const li = l / 100;
+  const a = sat * Math.min(li, 1 - li);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const c = li - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
 
 interface ProcessedGraphLink {
   source: GraphNode;
@@ -76,6 +93,15 @@ export class Graph3DView extends ItemView {
   private graphContainer: HTMLDivElement;
   private messageEl: HTMLDivElement;
   private counterEl: HTMLDivElement;
+  private mtimeRange: { min: number; max: number } | null = null;
+  private colorRanks: {
+    by: ColorBy;
+    keys: string[];
+    counts: Map<string, number>;
+    ranks: Map<string, number>;
+  } | null = null;
+  private legendEl: HTMLDivElement | null = null;
+  private legendShown = false;
   private settingsPanel: HTMLDivElement;
   private settingsToggleButton: HTMLDivElement;
 
@@ -203,6 +229,9 @@ export class Graph3DView extends ItemView {
     this.counterEl = viewWrapper.createEl("div", {
       cls: "graph-3d-counter",
     });
+    this.legendEl = viewWrapper.createEl("div", {
+      cls: "graph-3d-legend",
+    });
 
     this.addLocalControls();
     this.initializeGraph();
@@ -288,6 +317,27 @@ export class Graph3DView extends ItemView {
       this.labelRenderer.showAllLabels = !this.labelRenderer.showAllLabels;
       syncLabelsButton();
       this.updateLabels();
+    });
+
+    // Per view and starts hidden, like the titles button above.
+    const legendButton = controlsContainer.createEl("div", {
+      cls: "graph-3d-hub-toggle",
+    });
+    setIcon(legendButton, "palette");
+    legendButton.setAttribute("aria-label", "Show color legend");
+    legendButton.addEventListener("click", () => {
+      const by = this.settings.colorBy;
+      if (!this.legendShown && by !== "folder" && by !== "tag") {
+        new Notice('Set "Color notes by" to Top folder or First tag (A-Z) in the graph settings first.');
+        return;
+      }
+      this.legendShown = !this.legendShown;
+      legendButton.toggleClass("is-active", this.legendShown);
+      legendButton.setAttribute(
+        "aria-label",
+        this.legendShown ? "Hide color legend" : "Show color legend",
+      );
+      this.updateLegend();
     });
 
     this.settingsToggleButton = controlsContainer.createEl("div", {
@@ -540,6 +590,18 @@ export class Graph3DView extends ItemView {
         }),
     );
 
+    new Setting(container)
+      .setName("Color notes by")
+      .setDesc("Overrides the note color. Group rules still win.")
+      .addDropdown((dd) =>
+        dd
+          .addOptions({ none: "None", folder: "Top folder", tag: "First tag (A-Z)", recency: "Last modified" })
+          .setValue(this.settings.colorBy)
+          .onChange(async (value: string) => {
+            this.settings.colorBy = value as ColorBy;
+            await updateDisplayAndColors();
+          }),
+      );
     new Setting(container).setName("Node shape").addDropdown((dd) =>
       dd
         .addOptions(NodeShape)
@@ -1188,6 +1250,9 @@ export class Graph3DView extends ItemView {
         this.occludersCacheDirty = true;
 
         this.linkAdjacencyIndex.clear();
+        this.mtimeRange = null;
+        this.colorRanks = null;
+        this.updateLegend();
         const processedLinks = this.graph.graphData().links as ProcessedGraphLink[];
         processedLinks.forEach((link) => {
           const sourceId =
@@ -1419,6 +1484,8 @@ export class Graph3DView extends ItemView {
       this.instancedRenderer.updateEdgeColors(highlightedEdgeIndices, linkHighlightColor, linkColor);
     }
 
+    this.updateLegend();
+
     if (this.labelRenderer && this.currentPositions.length > 0) {
       this.labelRenderer.updateVisibilityAndOcclusion(
         this.graph.camera(),
@@ -1555,6 +1622,91 @@ export class Graph3DView extends ItemView {
     }
   }
 
+  private getColorKey(node: GraphNode, by: ColorBy): string | undefined {
+    if (by === "folder") {
+      const i = node.id.indexOf("/");
+      return i > 0 ? node.id.slice(0, i) : undefined;
+    }
+    if (by === "tag" && node.tags && node.tags.length > 0) {
+      return node.tags.reduce((a, b) => (b < a ? b : a)).split("/")[0];
+    }
+    return undefined;
+  }
+
+  private getColorRanks(by: ColorBy) {
+    if (this.colorRanks?.by === by) return this.colorRanks;
+    const counts = new Map<string, number>();
+    for (const n of this.currentNodes) {
+      if (n.type !== NodeType.File) continue;
+      const k = this.getColorKey(n, by);
+      if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const all = [...counts.keys()].sort(
+      (x, y) => (counts.get(y) ?? 0) - (counts.get(x) ?? 0) || x.localeCompare(y),
+    );
+    const keys = all.slice(0, COLOR_BY_HUES.length);
+    this.colorRanks = {
+      by,
+      keys,
+      counts,
+      ranks: new Map(keys.map((k, i) => [k, i])),
+    };
+    return this.colorRanks;
+  }
+
+  private rankColor(rank: number): string {
+    const light = document.body.hasClass("theme-dark") ? 45 : 35;
+    return hslToHex(COLOR_BY_HUES[rank], 40, light);
+  }
+
+  private getColorByColor(node: GraphNode, by: ColorBy): string | null {
+    if (by === "recency") {
+      if (node.mtime === undefined) return null;
+      if (!this.mtimeRange) {
+        let min = Infinity;
+        let max = -Infinity;
+        for (const n of this.currentNodes) {
+          if (n.mtime === undefined) continue;
+          if (n.mtime < min) min = n.mtime;
+          if (n.mtime > max) max = n.mtime;
+        }
+        this.mtimeRange = { min, max };
+      }
+      const { min, max } = this.mtimeRange;
+      const t = max > min ? (node.mtime - min) / (max - min) : 1;
+      return hslToHex(210, 40, 22 + 28 * t);
+    }
+    const key = this.getColorKey(node, by);
+    if (!key) return null;
+    const rank = this.getColorRanks(by).ranks.get(key);
+    return rank === undefined ? null : this.rankColor(rank);
+  }
+
+  private updateLegend() {
+    const el = this.legendEl;
+    if (!el) return;
+    const by = this.settings.colorBy;
+    const r =
+      this.legendShown && (by === "folder" || by === "tag") ? this.getColorRanks(by) : null;
+    if (!r || r.keys.length === 0) {
+      el.removeClass("is-visible");
+      return;
+    }
+    const sig = r.keys.map((k, i) => `${k}:${r.counts.get(k)}:${this.rankColor(i)}`).join("|");
+    if (el.dataset.sig === sig && el.hasClass("is-visible")) return;
+    el.dataset.sig = sig;
+    el.empty();
+    r.keys.forEach((k, i) => {
+      const row = el.createDiv({ cls: "graph-3d-legend-row" });
+      row.createSpan({ cls: "graph-3d-legend-swatch" }).style.backgroundColor = this.rankColor(i);
+      row.createSpan({ text: `${k} (${r.counts.get(k)})` });
+    });
+    const other = el.createDiv({ cls: "graph-3d-legend-row" });
+    other.createSpan({ cls: "graph-3d-legend-swatch is-other" });
+    other.createSpan({ text: "other" });
+    el.addClass("is-visible");
+  }
+
   private getNodeColor(node: GraphNode): string {
     const { useThemeColors, colorHighlight, colorNode, colorTag, colorAttachment } = this.settings;
 
@@ -1603,6 +1755,11 @@ export class Graph3DView extends ItemView {
           return group.color;
         }
       }
+    }
+
+    if (node.type === NodeType.File && this.settings.colorBy !== "none") {
+      const c = this.getColorByColor(node, this.settings.colorBy);
+      if (c) return c;
     }
 
     if (useThemeColors) {
@@ -1958,6 +2115,7 @@ export class Graph3DView extends ItemView {
               filename: file.name,
               type,
               tags,
+              mtime: file.stat.mtime,
             };
             this.processedNodes.set(file.path, {
               node,
@@ -2183,6 +2341,10 @@ export class Graph3DView extends ItemView {
     }
     if (this.counterEl) {
       this.counterEl.remove();
+    }
+    if (this.legendEl) {
+      this.legendEl.remove();
+      this.legendEl = null;
     }
     this.clearResourceCaches();
     if (this.colorResolverEl) {

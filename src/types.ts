@@ -18,6 +18,8 @@ export enum NodeShape {
   Tetrahedron = "Tetrahedron",
 }
 
+export type ColorBy = "none" | "folder" | "tag" | "recency";
+
 export interface Graph3DPluginSettings {
   searchQuery: string;
   showNeighboringNodes: boolean;
@@ -40,6 +42,7 @@ export interface Graph3DPluginSettings {
   nodeShape: NodeShape;
   tagShape: NodeShape;
   attachmentShape: NodeShape;
+  colorBy: ColorBy;
   showNodeLabels: boolean;
   showLabelsOnHoverOnly: boolean;
   labelDistance: number;
@@ -90,6 +93,7 @@ export const DEFAULT_SETTINGS: Graph3DPluginSettings = {
   nodeShape: NodeShape.Sphere,
   tagShape: NodeShape.Tetrahedron,
   attachmentShape: NodeShape.Cube,
+  colorBy: "none",
   showNodeLabels: true,
   showLabelsOnHoverOnly: false,
   labelDistance: 150,
@@ -128,6 +132,7 @@ export interface GraphNode {
   filename?: string;
   type: NodeType;
   tags?: string[];
+  mtime?: number;
   content?: string;
   lowerCaseContent?: string;
   __threeObj?: THREE.Object3D;
