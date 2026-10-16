@@ -140,6 +140,7 @@ export class Graph3DView extends ItemView {
   private nodeMap = new Map<string, GraphNode>();
   private reciprocalLinks = new Set<string>();
   private linkAdjacencyIndex = new Map<string, ProcessedGraphLink[]>();
+  private maxDegree = 1;
   private lastHighlightedNodes = new Set<string>();
   private preprocessedGroups: PreprocessedGroup[] = [];
   private groupsDirty = true;
@@ -612,6 +613,15 @@ export class Graph3DView extends ItemView {
             this.settings.colorBy = value as ColorBy;
             await updateDisplayAndColors();
           }),
+      );
+    new Setting(container)
+      .setName("Size notes by links")
+      .setDesc("Notes with more links are larger.")
+      .addToggle((t) =>
+        t.setValue(this.settings.sizeByDegree).onChange(async (v) => {
+          this.settings.sizeByDegree = v;
+          await updateDisplayAndColors();
+        }),
       );
     new Setting(container).setName("Hover card").addToggle((t) =>
       t.setValue(this.settings.showHoverCard).onChange(async (v) => {
@@ -1301,6 +1311,13 @@ export class Graph3DView extends ItemView {
           this.linkAdjacencyIndex.get(targetId)!.push(link);
         });
 
+        this.maxDegree = 1;
+        for (const n of newData.nodes) {
+          if (n.type === NodeType.Tag || n.type === NodeType.Attachment) continue;
+          const d = this.linkAdjacencyIndex.get(n.id)?.length ?? 0;
+          if (d > this.maxDegree) this.maxDegree = d;
+        }
+
         if (this.counterEl) {
           this.counterEl.setText(`${newData.nodes.length} nodes · ${newData.links.length} links`);
           this.counterEl.addClass("is-visible");
@@ -1645,8 +1662,13 @@ export class Graph3DView extends ItemView {
         return this.settings.tagNodeSize;
       case NodeType.Attachment:
         return this.settings.attachmentNodeSize;
-      default:
-        return this.settings.nodeSize;
+      default: {
+        const base = this.settings.nodeSize;
+        if (!this.settings.sizeByDegree) return base;
+        const degree = this.linkAdjacencyIndex.get(node.id)?.length ?? 0;
+        // ponytail: 1x to 3x of nodeSize, sqrt keeps hubs from swamping the rest
+        return base * (1 + 2 * Math.sqrt(degree / this.maxDegree));
+      }
     }
   }
 
@@ -1896,6 +1918,17 @@ export class Graph3DView extends ItemView {
     if (!this.isGraphInitialized) return;
     this.updatePreprocessedGroups();
     this.updateColors();
+    this.applyNodeSizes();
+  }
+
+  private applyNodeSizes() {
+    if (!this.settings.useWasmPhysics || this.nodeIdToIndex.size === 0) return;
+    const sizes = new Float32Array(this.nodeIdToIndex.size);
+    for (const n of this.graph.graphData().nodes as GraphNode[]) {
+      const i = this.nodeIdToIndex.get(n.id);
+      if (i !== undefined) sizes[i] = this.getNodeSize(n);
+    }
+    this.instancedRenderer?.setNodeSizes(sizes);
   }
 
   public updateForces() {

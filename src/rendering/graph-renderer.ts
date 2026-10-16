@@ -265,6 +265,17 @@ export class InstancedGraphRenderer {
       if (i >= 0 && i < this.nodeCount) this.hiddenFlags[i] = 1;
     });
 
+    this.refreshScaleAttrs();
+  }
+
+  /** Rescale nodes in place (index order matches initGraph), keeping hidden nodes at zero. */
+  public setNodeSizes(sizes: ArrayLike<number>): void {
+    if (this.nodeCount === 0) return;
+    for (let i = 0; i < this.nodeCount; i++) this.nodeScales[i] = sizes[i] * 1.5;
+    this.refreshScaleAttrs();
+  }
+
+  private refreshScaleAttrs(): void {
     for (const bucket of this.shapeBuckets.values()) {
       if (!bucket.scaleAttr) continue;
       const scales = bucket.scaleAttr.array as Float32Array;

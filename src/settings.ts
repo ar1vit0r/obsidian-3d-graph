@@ -377,6 +377,16 @@ export class Graph3DSettingsTab extends PluginSettingTab {
           this.triggerUpdate({ updateDisplay: true });
         }),
     );
+    new Setting(containerEl)
+      .setName("Size notes by links")
+      .setDesc("Notes with more links are larger.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.sizeByDegree).onChange(async (v) => {
+          this.plugin.settings.sizeByDegree = v;
+          await this.plugin.saveSettings();
+          this.triggerUpdate({ updateDisplay: true });
+        }),
+      );
     new Setting(containerEl).setName("Link thickness").addSlider((s) =>
       s
         .setLimits(0.1, 5, 0.1)
