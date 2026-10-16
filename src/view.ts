@@ -95,6 +95,9 @@ export class Graph3DView extends ItemView {
   private counterEl: HTMLDivElement;
   private hoverCardEl: HTMLDivElement | null = null;
   private hoverCardNodeId: string | null = null;
+  private pinnedCardEl: HTMLDivElement | null = null;
+  private pinnedCardNodeId: string | null = null;
+  private pinnedProjection = new THREE.Vector3();
   private mtimeRange: { min: number; max: number } | null = null;
   private colorRanks: {
     by: ColorBy;
@@ -233,6 +236,9 @@ export class Graph3DView extends ItemView {
     });
     this.hoverCardEl = viewWrapper.createEl("div", {
       cls: "graph-3d-hover-card",
+    });
+    this.pinnedCardEl = viewWrapper.createEl("div", {
+      cls: "graph-3d-hover-card graph-3d-pinned-card",
     });
     this.legendEl = viewWrapper.createEl("div", {
       cls: "graph-3d-legend",
@@ -972,6 +978,7 @@ export class Graph3DView extends ItemView {
           this.highlightedNodes.clear();
           this.highlightedLinks.clear();
           this.updateColors();
+          this.updatePinnedCard();
         }
       }
     });
@@ -1271,6 +1278,7 @@ export class Graph3DView extends ItemView {
         this.mtimeRange = null;
         this.colorRanks = null;
         this.hoverCardNodeId = null;
+        this.pinnedCardNodeId = null;
         this.updateLegend();
         const processedLinks = this.graph.graphData().links as ProcessedGraphLink[];
         processedLinks.forEach((link) => {
@@ -1396,6 +1404,7 @@ export class Graph3DView extends ItemView {
               this.physicsBridge.onTick((positions) => {
                 this.currentPositions = positions;
                 this.instancedRenderer?.updatePositions(positions);
+                this.updatePinnedCard();
                 if (this.settings.showNodeLabels && !this.settings.performanceMode) {
                   this.labelRenderer?.updateVisibilityAndOcclusion(
                     this.graph.camera(),
@@ -1726,47 +1735,94 @@ export class Graph3DView extends ItemView {
     el.addClass("is-visible");
   }
 
+  private renderNodeCard(el: HTMLElement, node: GraphNode) {
+    let inCount = 0;
+    let outCount = 0;
+    for (const l of this.linkAdjacencyIndex.get(node.id) ?? []) {
+      if (l.source.id === node.id) outCount++;
+      else inCount++;
+    }
+    el.empty();
+    el.createDiv({ cls: "graph-3d-hover-title", text: node.name });
+    if (node.type !== NodeType.Tag) el.createDiv({ cls: "graph-3d-hover-meta", text: node.id });
+    el.createDiv({ cls: "graph-3d-hover-meta", text: `Links: ${inCount} in, ${outCount} out` });
+    if (node.tags && node.tags.length > 0) {
+      el.createDiv({
+        cls: "graph-3d-hover-meta",
+        text: node.tags.map((t) => `#${t}`).join(" "),
+      });
+    }
+    if (node.mtime !== undefined) {
+      el.createDiv({
+        cls: "graph-3d-hover-meta",
+        text: `Modified: ${new Date(node.mtime).toLocaleString()}`,
+      });
+    }
+  }
+
   private updateHoverCard(node: GraphNode | null, e: PointerEvent | null) {
     const el = this.hoverCardEl;
     if (!el) return;
-    if (!node || !e || !this.settings.showHoverCard) {
+    // The selected node already has the pinned card.
+    if (!node || !e || !this.settings.showHoverCard || node.id === this.selectedNode) {
       el.removeClass("is-visible");
       this.hoverCardNodeId = null;
       return;
     }
     if (this.hoverCardNodeId !== node.id) {
       this.hoverCardNodeId = node.id;
-      let inCount = 0;
-      let outCount = 0;
-      for (const l of this.linkAdjacencyIndex.get(node.id) ?? []) {
-        if (l.source.id === node.id) outCount++;
-        else inCount++;
-      }
-      el.empty();
-      el.createDiv({ cls: "graph-3d-hover-title", text: node.name });
-      if (node.type !== NodeType.Tag) el.createDiv({ cls: "graph-3d-hover-meta", text: node.id });
-      el.createDiv({ cls: "graph-3d-hover-meta", text: `Links: ${inCount} in, ${outCount} out` });
-      if (node.tags && node.tags.length > 0) {
-        el.createDiv({
-          cls: "graph-3d-hover-meta",
-          text: node.tags.map((t) => `#${t}`).join(" "),
-        });
-      }
-      if (node.mtime !== undefined) {
-        el.createDiv({
-          cls: "graph-3d-hover-meta",
-          text: `Modified: ${new Date(node.mtime).toLocaleString()}`,
-        });
-      }
+      this.renderNodeCard(el, node);
     }
     el.addClass("is-visible");
     const host = el.parentElement;
     if (!host) return;
     const r = host.getBoundingClientRect();
-    const x = Math.min(e.clientX - r.left + 14, r.width - el.offsetWidth - 4);
-    const y = Math.min(e.clientY - r.top + 14, r.height - el.offsetHeight - 4);
-    el.style.left = `${Math.max(4, x)}px`;
-    el.style.top = `${Math.max(4, y)}px`;
+    this.placeCard(el, e.clientX - r.left + 14, e.clientY - r.top + 14, r.width, r.height);
+  }
+
+  private placeCard(el: HTMLElement, x: number, y: number, hostW: number, hostH: number) {
+    el.style.left = `${Math.max(4, Math.min(x, hostW - el.offsetWidth - 4))}px`;
+    el.style.top = `${Math.max(4, Math.min(y, hostH - el.offsetHeight - 4))}px`;
+  }
+
+  // Follows the selected node on screen; called from the physics tick and camera changes.
+  private updatePinnedCard() {
+    const el = this.pinnedCardEl;
+    if (!el || (!this.selectedNode && this.pinnedCardNodeId === null)) return;
+    const node = this.selectedNode ? this.nodeMap.get(this.selectedNode) : undefined;
+    const idx = node ? this.nodeIdToIndex.get(node.id) : undefined;
+    const camera = this.graph?.camera();
+    const host = el.parentElement;
+    if (!node || idx === undefined || !camera || !host || this.currentPositions.length <= idx * 4) {
+      el.removeClass("is-visible");
+      this.pinnedCardNodeId = null;
+      return;
+    }
+    if (this.pinnedCardNodeId !== node.id) {
+      this.pinnedCardNodeId = node.id;
+      this.renderNodeCard(el, node);
+    }
+    this.pinnedProjection
+      .set(
+        this.currentPositions[idx * 4],
+        this.currentPositions[idx * 4 + 1],
+        this.currentPositions[idx * 4 + 2],
+      )
+      .project(camera);
+    if (this.pinnedProjection.z > 1) {
+      el.removeClass("is-visible");
+      return;
+    }
+    el.addClass("is-visible");
+    const w = host.clientWidth;
+    const h = host.clientHeight;
+    this.placeCard(
+      el,
+      (this.pinnedProjection.x * 0.5 + 0.5) * w + 16,
+      (-this.pinnedProjection.y * 0.5 + 0.5) * h + 16,
+      w,
+      h,
+    );
   }
 
   private getNodeColor(node: GraphNode): string {
@@ -1877,6 +1933,7 @@ export class Graph3DView extends ItemView {
       if (!this.controlsListenerAdded) {
         let labelUpdatePending = false;
         controls.addEventListener("change", () => {
+          this.updatePinnedCard();
           if (!this.settings.showNodeLabels || this.settings.performanceMode) return;
           if (!labelUpdatePending) {
             labelUpdatePending = true;
@@ -1951,6 +2008,7 @@ export class Graph3DView extends ItemView {
       this.highlightedLinks.clear();
     } else {
       this.selectedNode = node.id;
+      this.updateHoverCard(null, null);
       this.highlightedNodes.clear();
       this.highlightedLinks.clear();
       this.highlightedNodes.add(node.id);
@@ -1990,6 +2048,7 @@ export class Graph3DView extends ItemView {
     }
     this.updateNodeColorsDiff();
     this.updateLabels();
+    this.updatePinnedCard();
   }
 
   private handleNodeHover(node: GraphNode | null) {
@@ -2407,6 +2466,10 @@ export class Graph3DView extends ItemView {
     if (this.hoverCardEl) {
       this.hoverCardEl.remove();
       this.hoverCardEl = null;
+    }
+    if (this.pinnedCardEl) {
+      this.pinnedCardEl.remove();
+      this.pinnedCardEl = null;
     }
     if (this.legendEl) {
       this.legendEl.remove();

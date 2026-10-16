@@ -237,3 +237,8 @@
 .graph-3d-legend-swatch.is-other {
 	background-color: var(--text-faint);
 }
+
+.graph-3d-pinned-card {
+	border-color: var(--interactive-accent);
+	z-index: 12;
+}
