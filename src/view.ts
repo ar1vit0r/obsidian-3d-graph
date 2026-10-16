@@ -1318,6 +1318,7 @@ export class Graph3DView extends ItemView {
         this.maxDegree = 1;
         for (const n of newData.nodes) {
           if (n.type === NodeType.Tag || n.type === NodeType.Attachment) continue;
+          if (this.isIndexHub(n)) continue;
           const d = this.linkAdjacencyIndex.get(n.id)?.length ?? 0;
           if (d > this.maxDegree) this.maxDegree = d;
         }
@@ -1671,7 +1672,7 @@ export class Graph3DView extends ItemView {
         if (!this.settings.sizeByDegree) return base;
         const degree = this.linkAdjacencyIndex.get(node.id)?.length ?? 0;
         // ponytail: 1x to 3x of nodeSize, sqrt keeps hubs from swamping the rest
-        return base * (1 + 2 * Math.sqrt(degree / this.maxDegree));
+        return base * (1 + 2 * Math.min(1, Math.sqrt(degree / this.maxDegree)));
       }
     }
   }
