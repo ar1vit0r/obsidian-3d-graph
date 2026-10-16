@@ -93,6 +93,8 @@ export class Graph3DView extends ItemView {
   private graphContainer: HTMLDivElement;
   private messageEl: HTMLDivElement;
   private counterEl: HTMLDivElement;
+  private hoverCardEl: HTMLDivElement | null = null;
+  private hoverCardNodeId: string | null = null;
   private mtimeRange: { min: number; max: number } | null = null;
   private colorRanks: {
     by: ColorBy;
@@ -228,6 +230,9 @@ export class Graph3DView extends ItemView {
     });
     this.counterEl = viewWrapper.createEl("div", {
       cls: "graph-3d-counter",
+    });
+    this.hoverCardEl = viewWrapper.createEl("div", {
+      cls: "graph-3d-hover-card",
     });
     this.legendEl = viewWrapper.createEl("div", {
       cls: "graph-3d-legend",
@@ -602,6 +607,14 @@ export class Graph3DView extends ItemView {
             await updateDisplayAndColors();
           }),
       );
+    new Setting(container).setName("Hover card").addToggle((t) =>
+      t.setValue(this.settings.showHoverCard).onChange(async (v) => {
+        this.settings.showHoverCard = v;
+        if (!v) this.updateHoverCard(null, null);
+        await updateDisplayAndColors();
+      }),
+    );
+
     new Setting(container).setName("Node shape").addDropdown((dd) =>
       dd
         .addOptions(NodeShape)
@@ -899,6 +912,7 @@ export class Graph3DView extends ItemView {
       this.raycaster.setFromCamera(ndc, camera);
 
       if (draggedNode && isPointerDown) {
+        this.updateHoverCard(null, null);
         if (this.raycaster.ray.intersectPlane(dragPlane, planeIntersect)) {
           draggedNode.x = planeIntersect.x;
           draggedNode.y = planeIntersect.y;
@@ -918,8 +932,12 @@ export class Graph3DView extends ItemView {
         if (node !== this.hoveredNode) {
           this.handleNodeHover(node);
         }
+        this.updateHoverCard(node, e);
       }
     });
+    this.registerDomEvent(this.graphContainer, "pointerleave", () =>
+      this.updateHoverCard(null, null),
+    );
 
     const onPointerUp = () => {
       if (draggedNode) {
@@ -1252,6 +1270,7 @@ export class Graph3DView extends ItemView {
         this.linkAdjacencyIndex.clear();
         this.mtimeRange = null;
         this.colorRanks = null;
+        this.hoverCardNodeId = null;
         this.updateLegend();
         const processedLinks = this.graph.graphData().links as ProcessedGraphLink[];
         processedLinks.forEach((link) => {
@@ -1705,6 +1724,49 @@ export class Graph3DView extends ItemView {
     other.createSpan({ cls: "graph-3d-legend-swatch is-other" });
     other.createSpan({ text: "other" });
     el.addClass("is-visible");
+  }
+
+  private updateHoverCard(node: GraphNode | null, e: PointerEvent | null) {
+    const el = this.hoverCardEl;
+    if (!el) return;
+    if (!node || !e || !this.settings.showHoverCard) {
+      el.removeClass("is-visible");
+      this.hoverCardNodeId = null;
+      return;
+    }
+    if (this.hoverCardNodeId !== node.id) {
+      this.hoverCardNodeId = node.id;
+      let inCount = 0;
+      let outCount = 0;
+      for (const l of this.linkAdjacencyIndex.get(node.id) ?? []) {
+        if (l.source.id === node.id) outCount++;
+        else inCount++;
+      }
+      el.empty();
+      el.createDiv({ cls: "graph-3d-hover-title", text: node.name });
+      if (node.type !== NodeType.Tag) el.createDiv({ cls: "graph-3d-hover-meta", text: node.id });
+      el.createDiv({ cls: "graph-3d-hover-meta", text: `Links: ${inCount} in, ${outCount} out` });
+      if (node.tags && node.tags.length > 0) {
+        el.createDiv({
+          cls: "graph-3d-hover-meta",
+          text: node.tags.map((t) => `#${t}`).join(" "),
+        });
+      }
+      if (node.mtime !== undefined) {
+        el.createDiv({
+          cls: "graph-3d-hover-meta",
+          text: `Modified: ${new Date(node.mtime).toLocaleString()}`,
+        });
+      }
+    }
+    el.addClass("is-visible");
+    const host = el.parentElement;
+    if (!host) return;
+    const r = host.getBoundingClientRect();
+    const x = Math.min(e.clientX - r.left + 14, r.width - el.offsetWidth - 4);
+    const y = Math.min(e.clientY - r.top + 14, r.height - el.offsetHeight - 4);
+    el.style.left = `${Math.max(4, x)}px`;
+    el.style.top = `${Math.max(4, y)}px`;
   }
 
   private getNodeColor(node: GraphNode): string {
@@ -2341,6 +2403,10 @@ export class Graph3DView extends ItemView {
     }
     if (this.counterEl) {
       this.counterEl.remove();
+    }
+    if (this.hoverCardEl) {
+      this.hoverCardEl.remove();
+      this.hoverCardEl = null;
     }
     if (this.legendEl) {
       this.legendEl.remove();

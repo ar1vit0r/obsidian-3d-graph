@@ -43,6 +43,7 @@ export interface Graph3DPluginSettings {
   tagShape: NodeShape;
   attachmentShape: NodeShape;
   colorBy: ColorBy;
+  showHoverCard: boolean;
   showNodeLabels: boolean;
   showLabelsOnHoverOnly: boolean;
   labelDistance: number;
@@ -94,6 +95,7 @@ export const DEFAULT_SETTINGS: Graph3DPluginSettings = {
   tagShape: NodeShape.Tetrahedron,
   attachmentShape: NodeShape.Cube,
   colorBy: "none",
+  showHoverCard: false,
   showNodeLabels: true,
   showLabelsOnHoverOnly: false,
   labelDistance: 150,
