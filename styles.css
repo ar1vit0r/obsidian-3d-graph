@@ -32,11 +32,44 @@
 
 .graph-3d-controls-container {
 	position: absolute;
-	top: 10px;
+	top: 50%;
 	right: 10px;
+	transform: translateY(-50%);
 	z-index: 10;
+}
+
+.graph-3d-controls-handle {
+	cursor: pointer;
+	padding: 8px;
+	background-color: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
 	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0.7;
+}
+
+/* The bar sits on top of the handle, centered on the same point, so nothing shifts on hover. */
+.graph-3d-controls-bar {
+	display: none;
+	position: absolute;
+	top: 50%;
+	right: 0;
+	transform: translateY(-50%);
+	flex-direction: column;
 	gap: 8px;
+}
+
+.graph-3d-controls-container:hover .graph-3d-controls-bar,
+.graph-3d-controls-container:has(.graph-3d-settings-panel.is-open) .graph-3d-controls-bar {
+	display: flex;
+}
+
+/* visibility, not display: the handle keeps the container's size so hover is not lost. */
+.graph-3d-controls-container:hover .graph-3d-controls-handle,
+.graph-3d-controls-container:has(.graph-3d-settings-panel.is-open) .graph-3d-controls-handle {
+	visibility: hidden;
 }
 
 .graph-3d-settings-toggle,
@@ -65,8 +98,9 @@
 .graph-3d-settings-panel {
 	display: none;
 	position: absolute;
-	top: 45px;
-	right: 0;
+	top: 50%;
+	right: calc(100% + 8px);
+	transform: translateY(-50%);
 	width: 360px;
 	max-height: 80vh;
 	overflow-y: auto;

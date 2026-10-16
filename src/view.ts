@@ -279,8 +279,12 @@ export class Graph3DView extends ItemView {
     const controlsContainer = this.contentEl.createEl("div", {
       cls: "graph-3d-controls-container",
     });
+    // The bar stays hidden until the pointer is over the container (see styles.css).
+    const handle = controlsContainer.createEl("div", { cls: "graph-3d-controls-handle" });
+    setIcon(handle, "menu");
+    const bar = controlsContainer.createEl("div", { cls: "graph-3d-controls-bar" });
 
-    const resetViewButton = controlsContainer.createEl("div", {
+    const resetViewButton = bar.createEl("div", {
       cls: "graph-3d-reset-toggle",
     });
     setIcon(resetViewButton, "refresh-cw");
@@ -293,7 +297,7 @@ export class Graph3DView extends ItemView {
       }
     });
 
-    const hubButton = controlsContainer.createEl("div", {
+    const hubButton = bar.createEl("div", {
       cls: "graph-3d-hub-toggle",
     });
     const syncHubButton = () => {
@@ -314,7 +318,7 @@ export class Graph3DView extends ItemView {
     });
 
     // Reuses the hub button's styling; state is per view and starts hidden.
-    const labelsButton = controlsContainer.createEl("div", {
+    const labelsButton = bar.createEl("div", {
       cls: "graph-3d-hub-toggle",
     });
     const syncLabelsButton = () => {
@@ -332,7 +336,7 @@ export class Graph3DView extends ItemView {
     });
 
     // Per view and starts hidden, like the titles button above.
-    const legendButton = controlsContainer.createEl("div", {
+    const legendButton = bar.createEl("div", {
       cls: "graph-3d-hub-toggle",
     });
     setIcon(legendButton, "palette");
@@ -352,7 +356,7 @@ export class Graph3DView extends ItemView {
       this.updateLegend();
     });
 
-    this.settingsToggleButton = controlsContainer.createEl("div", {
+    this.settingsToggleButton = bar.createEl("div", {
       cls: "graph-3d-settings-toggle",
     });
     setIcon(this.settingsToggleButton, "settings");
