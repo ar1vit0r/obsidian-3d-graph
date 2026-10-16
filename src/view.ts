@@ -272,6 +272,24 @@ export class Graph3DView extends ItemView {
       this.applyHubVisibility();
     });
 
+    // Reuses the hub button's styling; state is per view and starts hidden.
+    const labelsButton = controlsContainer.createEl("div", {
+      cls: "graph-3d-hub-toggle",
+    });
+    const syncLabelsButton = () => {
+      const shown = this.labelRenderer?.showAllLabels ?? false;
+      setIcon(labelsButton, shown ? "type" : "baseline");
+      labelsButton.setAttribute("aria-label", shown ? "Hide all node titles" : "Show all node titles");
+      labelsButton.toggleClass("is-active", shown);
+    };
+    syncLabelsButton();
+    labelsButton.addEventListener("click", () => {
+      if (!this.labelRenderer) return;
+      this.labelRenderer.showAllLabels = !this.labelRenderer.showAllLabels;
+      syncLabelsButton();
+      this.updateLabels();
+    });
+
     this.settingsToggleButton = controlsContainer.createEl("div", {
       cls: "graph-3d-settings-toggle",
     });
@@ -1299,8 +1317,7 @@ export class Graph3DView extends ItemView {
                     this.graph.camera(),
                     positions,
                     this.settings,
-                    this.hoveredNode ? this.hoveredNode.id : null,
-                    this.highlightedNodes,
+                    this.hoveredNode?.id ?? this.selectedNode,
                   );
                 }
                 this.handleKeyboardMovement();
@@ -1406,8 +1423,7 @@ export class Graph3DView extends ItemView {
         this.graph.camera(),
         this.currentPositions,
         this.settings,
-        this.hoveredNode ? this.hoveredNode.id : null,
-        this.highlightedNodes,
+        this.hoveredNode?.id ?? this.selectedNode,
       );
     }
   }
@@ -1675,8 +1691,7 @@ export class Graph3DView extends ItemView {
       camera,
       this.currentPositions,
       this.settings,
-      this.hoveredNode ? this.hoveredNode.id : null,
-      this.highlightedNodes,
+      this.hoveredNode?.id ?? this.selectedNode,
     );
   }
 
@@ -1819,8 +1834,7 @@ export class Graph3DView extends ItemView {
         this.graph.camera(),
         this.currentPositions,
         this.settings,
-        this.hoveredNode ? this.hoveredNode.id : null,
-        this.highlightedNodes,
+        this.hoveredNode?.id ?? this.selectedNode,
       );
     }
 

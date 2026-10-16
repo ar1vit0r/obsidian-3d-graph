@@ -370,12 +370,14 @@ export class InstancedLabelRenderer {
     this.scene.add(this.instancedMesh);
   }
 
+  /** Toolbar toggle: when false, only the focused (hovered or selected) title is drawn. */
+  public showAllLabels = false;
+
   public updateVisibilityAndOcclusion(
     camera: THREE.Camera,
     positions: Float32Array,
     settings: Graph3DPluginSettings,
     hoveredNodeId: string | null = null,
-    highlightedNodeIds: Set<string> = new Set(),
   ): void {
     if (
       !this.opacityAttr ||
@@ -404,7 +406,7 @@ export class InstancedLabelRenderer {
 
     const camPos = camera.position;
     const checkOcclusion = settings.labelOcclusion;
-    const hoverOnly = settings.showLabelsOnHoverOnly;
+    const hoverOnly = settings.showLabelsOnHoverOnly || !this.showAllLabels;
 
     // First pass: update positions and compute distance fade
     for (let i = 0; i < this.labelCount; i++) {
@@ -426,9 +428,7 @@ export class InstancedLabelRenderer {
       }
 
       if (hoverOnly) {
-        const isHovered = hoveredNodeId !== null && label.id === hoveredNodeId;
-        const isHighlighted = highlightedNodeIds.has(label.id);
-        if (!isHovered && !isHighlighted) {
+        if (hoveredNodeId === null || label.id !== hoveredNodeId) {
           opacities[i] = 0.0;
           continue;
         }
