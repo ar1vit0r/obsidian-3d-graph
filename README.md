@@ -28,6 +28,9 @@ While other 3D graph plugins exist, this one is built for **extreme performance 
     - **Single-click** a node to focus the camera and highlight immediate links.
     - **Double-click** a node to open it in a new tab.
     - **Drag & Drop** nodes in 3D space to re-anchor layout positions live.
+    - **Info card:** the selected node shows a card with its path, links in and out, tags, and modified date. An optional hover card shows the same on hover.
+    - **Auto-rotate:** the camera can slowly orbit the graph when you stop interacting.
+- **Floating Toolbar:** A vertical bar on the right edge, revealed on hover, with buttons to hide the index note, show all node titles, and show the color legend.
 - **Rust WASM Physics Backend:**
     - Off-thread simulation tick loop running inside a Web Worker.
     - Instant parameter updates and zero-copy position synchronization.
@@ -36,6 +39,8 @@ While other 3D graph plugins exist, this one is built for **extreme performance 
     - **Live Filters:** On-the-fly toggles for attachments, tags, and orphan nodes.
 - **Deep Customization:**
     - **Color Groups:** Rule-based styling with `path:`, `tag:`, `file:`, or content matching.
+    - **Color Notes By:** Color notes by top folder, first tag, or last modified. Group rules still win.
+    - **Size Notes By Links:** Notes with more links are larger, up to three times the base size.
     - **Node Appearance:** Custom shapes (Sphere, Cube, Pyramid, Tetrahedron) and sizing.
     - **Physics Controls:** Tweak Center force, Repel force, Link force, and WASM engine mode.
 
@@ -69,8 +74,8 @@ Go to `Settings` > `3D Graph Plugin` or use the in-graph floating settings gear 
 
 - **Search & Filters:** Search term matching, neighboring node inclusion, and tag/attachment/orphan toggles.
 - **Color Groups:** Custom color assignment rules using `path:`, `tag:`, and `file:`.
-- **Appearance & Display:** Custom geometry shapes, sizes, colors, and label visibility distance.
-- **Interaction:** Keyboard navigation (WASD), zoom speed, pan speed, and rotation sensitivity.
+- **Appearance & Display:** Custom geometry shapes, sizes, colors, color notes by, size notes by links, the hover card, and label visibility distance.
+- **Interaction:** Keyboard navigation (WASD), zoom speed, pan speed, rotation sensitivity, and auto-rotate when idle.
 - **Forces:** Adjust Repel force, Link force, Center force, and toggle **"Use Rust WASM Physics Engine"**.
 
 ---
