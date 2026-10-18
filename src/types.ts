@@ -1,4 +1,5 @@
 import type * as THREE from "three";
+import type { NoteMeta } from "./note-meta";
 
 export interface ColorGroup {
   query: string;
@@ -18,7 +19,7 @@ export enum NodeShape {
   Tetrahedron = "Tetrahedron",
 }
 
-export type ColorBy = "none" | "folder" | "tag" | "recency";
+export type ColorBy = "none" | "folder" | "tag" | "recency" | "priority" | "score";
 
 export interface Graph3DPluginSettings {
   searchQuery: string;
@@ -44,6 +45,7 @@ export interface Graph3DPluginSettings {
   attachmentShape: NodeShape;
   colorBy: ColorBy;
   sizeByDegree: boolean;
+  sizeByScore: boolean;
   showHoverCard: boolean;
   showNodeLabels: boolean;
   showLabelsOnHoverOnly: boolean;
@@ -97,6 +99,7 @@ export const DEFAULT_SETTINGS: Graph3DPluginSettings = {
   attachmentShape: NodeShape.Cube,
   colorBy: "none",
   sizeByDegree: true,
+  sizeByScore: false,
   showHoverCard: false,
   showNodeLabels: true,
   showLabelsOnHoverOnly: false,
@@ -137,6 +140,7 @@ export interface GraphNode {
   type: NodeType;
   tags?: string[];
   mtime?: number;
+  meta?: NoteMeta;
   content?: string;
   lowerCaseContent?: string;
   __threeObj?: THREE.Object3D;

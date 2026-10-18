@@ -12,6 +12,7 @@ import {
 import * as THREE from "three";
 import type Graph3DPlugin from "../main";
 import { PhysicsBridge } from "./physics/physics-bridge";
+import { readNoteMeta } from "./note-meta";
 import { createWorkerBlobUrl, getWasmArrayBuffer } from "./physics/wasm-loader";
 import { InstancedGraphRenderer } from "./rendering/graph-renderer";
 import { InstancedLabelRenderer } from "./rendering/label-renderer";
@@ -30,6 +31,10 @@ export const VIEW_TYPE_3D_GRAPH = "3d-graph-view";
 
 // Eight muted, well-separated hues: the legend and the cap both use this list.
 const COLOR_BY_HUES = [10, 45, 95, 150, 190, 225, 270, 320];
+// Priority 1 to 4: red, orange, yellow, blue-grey.
+const PRIORITY_HUES = [5, 30, 55, 210];
+// ponytail: fixed cap instead of the vault max, so colors and sizes do not shift as notes change
+const SCORE_CAP = 12;
 
 function hslToHex(h: number, s: number, l: number): string {
   const sat = s / 100;
@@ -611,7 +616,14 @@ export class Graph3DView extends ItemView {
       .setDesc("Overrides the note color. Group rules still win.")
       .addDropdown((dd) =>
         dd
-          .addOptions({ none: "None", folder: "Top folder", tag: "First tag (A-Z)", recency: "Last modified" })
+          .addOptions({
+            none: "None",
+            folder: "Top folder",
+            tag: "First tag (A-Z)",
+            recency: "Last modified",
+            priority: "Priority",
+            score: "Score",
+          })
           .setValue(this.settings.colorBy)
           .onChange(async (value: string) => {
             this.settings.colorBy = value as ColorBy;
@@ -624,6 +636,15 @@ export class Graph3DView extends ItemView {
       .addToggle((t) =>
         t.setValue(this.settings.sizeByDegree).onChange(async (v) => {
           this.settings.sizeByDegree = v;
+          await updateDisplayAndColors();
+        }),
+      );
+    new Setting(container)
+      .setName("Size notes by score")
+      .setDesc("Notes with a score are larger. Notes without one use the links rule.")
+      .addToggle((t) =>
+        t.setValue(this.settings.sizeByScore).onChange(async (v) => {
+          this.settings.sizeByScore = v;
           await updateDisplayAndColors();
         }),
       );
@@ -1688,6 +1709,8 @@ export class Graph3DView extends ItemView {
         return this.settings.attachmentNodeSize;
       default: {
         const base = this.settings.nodeSize;
+        const score = this.settings.sizeByScore ? node.meta?.score : undefined;
+        if (score !== undefined) return base * (1 + 2 * Math.min(1, score / SCORE_CAP));
         if (!this.settings.sizeByDegree) return base;
         const degree = this.linkAdjacencyIndex.get(node.id)?.length ?? 0;
         // ponytail: 1x to 3x of nodeSize, sqrt keeps hubs from swamping the rest
@@ -1750,6 +1773,17 @@ export class Graph3DView extends ItemView {
       const t = max > min ? (node.mtime - min) / (max - min) : 1;
       return hslToHex(210, 40, 22 + 28 * t);
     }
+    if (by === "priority") {
+      const p = node.meta?.priority;
+      if (p === undefined) return null;
+      const hue = PRIORITY_HUES[Math.min(4, Math.max(1, Math.round(p))) - 1];
+      return hslToHex(hue, 60, document.body.hasClass("theme-dark") ? 50 : 40);
+    }
+    if (by === "score") {
+      const s = node.meta?.score;
+      if (s === undefined) return null;
+      return hslToHex(40, 70, 22 + 33 * Math.min(1, s / SCORE_CAP));
+    }
     const key = this.getColorKey(node, by);
     if (!key) return null;
     const rank = this.getColorRanks(by).ranks.get(key);
@@ -1797,6 +1831,26 @@ export class Graph3DView extends ItemView {
         cls: "graph-3d-hover-meta",
         text: node.tags.map((t) => `#${t}`).join(" "),
       });
+    }
+    const m = node.meta;
+    if (m) {
+      const fields = [
+        ["Priority", m.priority],
+        ["Effort", m.effort],
+        ["Return", m.return],
+        ["Friction", m.friction],
+      ].filter(([, v]) => v !== undefined);
+      if (fields.length > 0) {
+        el.createDiv({
+          cls: "graph-3d-hover-meta",
+          text: fields.map(([k, v]) => `${k}: ${v}`).join(" · "),
+        });
+      }
+      if (m.score !== undefined) {
+        el.createDiv({ cls: "graph-3d-hover-meta", text: `Score: ${m.score.toFixed(1)}` });
+      }
+      const where = [m.status, m.area].filter(Boolean).join(" · ");
+      if (where) el.createDiv({ cls: "graph-3d-hover-meta", text: where });
     }
     if (node.mtime !== undefined) {
       el.createDiv({
@@ -2294,6 +2348,7 @@ export class Graph3DView extends ItemView {
               type,
               tags,
               mtime: file.stat.mtime,
+              meta: readNoteMeta(cache?.frontmatter),
             };
             this.processedNodes.set(file.path, {
               node,
