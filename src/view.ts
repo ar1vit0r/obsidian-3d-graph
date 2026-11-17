@@ -1011,17 +1011,12 @@ export class Graph3DView extends ItemView {
     );
 
     // Freeze the layout while the pointer is over the graph so nodes hold still under the cursor.
-    let physicsPausedByHover = false;
-    this.registerDomEvent(this.graphContainer, "pointerenter", () => {
-      if (!this.physicsBridge.running) return;
-      this.physicsBridge.stop();
-      physicsPausedByHover = true;
-    });
-    this.registerDomEvent(this.graphContainer, "pointerleave", () => {
-      if (!physicsPausedByHover) return;
-      physicsPausedByHover = false;
-      this.physicsBridge.start();
-    });
+    this.registerDomEvent(this.graphContainer, "pointerenter", () =>
+      this.physicsBridge.setPaused(true),
+    );
+    this.registerDomEvent(this.graphContainer, "pointerleave", () =>
+      this.physicsBridge.setPaused(false),
+    );
 
     const onPointerUp = () => {
       if (draggedNode) {

@@ -26,6 +26,9 @@ export class PhysicsBridge {
   private onTickCallbacks: Set<TickCallback> = new Set();
   private isRunning = false;
   private isReady = false;
+  private paused = false;
+  private wantRun = false;
+  private loopActive = false;
 
   private sharedPositions: Float32Array | null = null;
   private pingPongView: Float32Array | null = null;
@@ -85,6 +88,7 @@ export class PhysicsBridge {
               }
             });
           } else {
+            this.loopActive = false;
             return;
           }
 
@@ -98,7 +102,10 @@ export class PhysicsBridge {
             const worker = this.worker;
             requestAnimationFrame(() => {
               if (this.isRunning && this.worker === worker) this.step();
+              else this.loopActive = false;
             });
+          } else {
+            this.loopActive = false;
           }
         } else if (msg.type === "ERROR") {
           console.error("[Rust WASM Physics Error]:", msg.error);
@@ -127,17 +134,34 @@ export class PhysicsBridge {
   }
 
   public start(): void {
-    if (!this.isReady || this.isRunning) return;
+    if (!this.isReady) return;
+    if (this.paused) {
+      this.wantRun = true;
+      return;
+    }
+    if (this.isRunning) return;
     this.isRunning = true;
+    // A pause/resume inside one frame leaves the old chain alive: don't start a second.
+    if (this.loopActive) return;
+    this.loopActive = true;
     this.step();
   }
 
-  public get running(): boolean {
-    return this.isRunning;
+  /** Freeze the stepping loop. start() while paused is remembered and runs on resume. */
+  public setPaused(paused: boolean): void {
+    this.paused = paused;
+    if (paused) {
+      this.wantRun ||= this.isRunning;
+      this.isRunning = false;
+    } else if (this.wantRun) {
+      this.wantRun = false;
+      this.start();
+    }
   }
 
   public stop(): void {
     this.isRunning = false;
+    this.wantRun = false;
   }
 
   public step(count = 1): void {
@@ -179,5 +203,8 @@ export class PhysicsBridge {
     this.sharedPositions = null;
     this.pingPongView = null;
     this.isReady = false;
+    // paused is kept: the pointer may still be over the graph when the data is re-initialised.
+    this.wantRun = false;
+    this.loopActive = false;
   }
 }
