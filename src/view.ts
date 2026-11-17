@@ -36,6 +36,17 @@ const PRIORITY_HUES = [5, 30, 55, 210];
 // ponytail: fixed cap instead of the vault max, so colors and sizes do not shift as notes change
 const SCORE_CAP = 12;
 
+type LegendRow = { color: string | null; text: string; plain?: boolean };
+
+function priorityColor(priority: number): string {
+  const hue = PRIORITY_HUES[Math.min(4, Math.max(1, Math.round(priority))) - 1];
+  return hslToHex(hue, 60, document.body.hasClass("theme-dark") ? 50 : 40);
+}
+
+function scoreColor(score: number): string {
+  return hslToHex(40, 70, 22 + 33 * Math.min(1, score / SCORE_CAP));
+}
+
 function hslToHex(h: number, s: number, l: number): string {
   const sat = s / 100;
   const li = l / 100;
@@ -349,8 +360,10 @@ export class Graph3DView extends ItemView {
     legendButton.setAttribute("aria-label", "Show color legend");
     legendButton.addEventListener("click", () => {
       const by = this.settings.colorBy;
-      if (!this.legendShown && by !== "folder" && by !== "tag") {
-        new Notice('Set "Color notes by" to Top folder or First tag (A-Z) in the graph settings first.');
+      if (!this.legendShown && !this.getLegendRows(by)) {
+        new Notice(
+          'No color legend for the current setting. Set "Color notes by" to Top folder, First tag, Priority or Score (with at least one folder or tag) first.',
+        );
         return;
       }
       this.legendShown = !this.legendShown;
@@ -1799,13 +1812,12 @@ export class Graph3DView extends ItemView {
     if (by === "priority") {
       const p = node.meta?.priority;
       if (p === undefined) return null;
-      const hue = PRIORITY_HUES[Math.min(4, Math.max(1, Math.round(p))) - 1];
-      return hslToHex(hue, 60, document.body.hasClass("theme-dark") ? 50 : 40);
+      return priorityColor(p);
     }
     if (by === "score") {
       const s = node.meta?.score;
       if (s === undefined) return null;
-      return hslToHex(40, 70, 22 + 33 * Math.min(1, s / SCORE_CAP));
+      return scoreColor(s);
     }
     const key = this.getColorKey(node, by);
     if (!key) return null;
@@ -1813,28 +1825,56 @@ export class Graph3DView extends ItemView {
     return rank === undefined ? null : this.rankColor(rank);
   }
 
+  // Legend rows for the current color mode, or null when the mode has no discrete key.
+  private getLegendRows(by: ColorBy): LegendRow[] | null {
+    let rows: LegendRow[];
+    if (by === "folder" || by === "tag") {
+      const r = this.getColorRanks(by);
+      if (r.keys.length === 0) return null;
+      rows = [
+        ...r.keys.map((k, i) => ({ color: this.rankColor(i), text: `${k} (${r.counts.get(k)})` })),
+        { color: null, text: "other" },
+      ];
+    } else if (by === "priority") {
+      const labels = ["1 (highest)", "2", "3", "4 (lowest)"];
+      rows = labels.map((text, i) => ({ color: priorityColor(i + 1), text }));
+      rows.push({ color: null, text: "not set" });
+    } else if (by === "score") {
+      rows = [0, SCORE_CAP / 2, SCORE_CAP].map((v) => ({
+        color: scoreColor(v),
+        text: v === SCORE_CAP ? `${v}+` : `${v}`,
+      }));
+      rows.push({ color: null, text: "not set" });
+    } else {
+      return null;
+    }
+    if (this.settings.sizeByScore) {
+      rows.push({ color: null, text: `size = score (0 to ${SCORE_CAP}+)`, plain: true });
+    }
+    return rows;
+  }
+
   private updateLegend() {
     const el = this.legendEl;
     if (!el) return;
-    const by = this.settings.colorBy;
-    const r =
-      this.legendShown && (by === "folder" || by === "tag") ? this.getColorRanks(by) : null;
-    if (!r || r.keys.length === 0) {
+    const rows = this.legendShown ? this.getLegendRows(this.settings.colorBy) : null;
+    if (!rows) {
       el.removeClass("is-visible");
       return;
     }
-    const sig = r.keys.map((k, i) => `${k}:${r.counts.get(k)}:${this.rankColor(i)}`).join("|");
+    const sig = rows.map((r) => `${r.text}:${r.color}`).join("|");
     if (el.dataset.sig === sig && el.hasClass("is-visible")) return;
     el.dataset.sig = sig;
     el.empty();
-    r.keys.forEach((k, i) => {
+    for (const r of rows) {
       const row = el.createDiv({ cls: "graph-3d-legend-row" });
-      row.createSpan({ cls: "graph-3d-legend-swatch" }).style.backgroundColor = this.rankColor(i);
-      row.createSpan({ text: `${k} (${r.counts.get(k)})` });
-    });
-    const other = el.createDiv({ cls: "graph-3d-legend-row" });
-    other.createSpan({ cls: "graph-3d-legend-swatch is-other" });
-    other.createSpan({ text: "other" });
+      if (!r.plain) {
+        const swatch = row.createSpan({ cls: "graph-3d-legend-swatch" });
+        if (r.color) swatch.style.backgroundColor = r.color;
+        else swatch.addClass("is-other");
+      }
+      row.createSpan({ text: r.text });
+    }
     el.addClass("is-visible");
   }
 
