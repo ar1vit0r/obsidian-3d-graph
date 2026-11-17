@@ -133,6 +133,7 @@ export class Graph3DView extends ItemView {
   private idleRotateFrame: number | null = null;
   private lastIdleRotateTime = 0;
   private lastInteractionTime = -Infinity;
+  private pointerInside = false;
   private readonly IDLE_ROTATE_DELAY = 3000;
   private cameraFitted = false;
   private idleRotateOffset = new THREE.Vector3();
@@ -1040,6 +1041,7 @@ export class Graph3DView extends ItemView {
 
     if (!this.settings.idleRotate || !this.graph || !this.isGraphInitialized) return;
     if (document.hidden || !this.graphContainer.isShown()) return;
+    if (this.pointerInside) return;
     if (now - this.lastInteractionTime < this.IDLE_ROTATE_DELAY) return;
 
     const camera = this.graph.camera();
@@ -1149,6 +1151,14 @@ export class Graph3DView extends ItemView {
       if (e.buttons) markInteraction();
     });
     this.registerDomEvent(this.graphContainer, "keydown", markInteraction);
+    // Pointer over the graph pauses rotation; leaving restarts the idle delay.
+    this.registerDomEvent(this.graphContainer, "pointerenter", () => {
+      this.pointerInside = true;
+    });
+    this.registerDomEvent(this.graphContainer, "pointerleave", () => {
+      this.pointerInside = false;
+      markInteraction();
+    });
     this.idleRotateFrame = requestAnimationFrame(this.idleRotateStep);
   }
 
