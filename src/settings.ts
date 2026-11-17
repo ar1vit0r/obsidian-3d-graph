@@ -434,6 +434,20 @@ export class Graph3DSettingsTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
     );
+    new Setting(containerEl)
+      .setName("Always label top notes")
+      .setDesc("Keep the highest-score (then most-linked) notes labelled. 0 turns it off.")
+      .addSlider((s) =>
+        s
+          .setLimits(0, 40, 1)
+          .setValue(this.plugin.settings.alwaysLabelTop)
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            this.plugin.settings.alwaysLabelTop = v;
+            await this.plugin.saveSettings();
+            this.triggerUpdate({ updateDisplay: true });
+          }),
+      );
     new Setting(containerEl).setName("Label fade threshold").addSlider((s) =>
       s
         .setLimits(0.1, 1, 0.1)

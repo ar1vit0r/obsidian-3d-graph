@@ -50,6 +50,7 @@ export interface Graph3DPluginSettings {
   showNodeLabels: boolean;
   showLabelsOnHoverOnly: boolean;
   labelDistance: number;
+  alwaysLabelTop: number;
   labelFadeThreshold: number;
   labelTextSize: number;
   labelTextColorLight: string;
@@ -104,6 +105,7 @@ export const DEFAULT_SETTINGS: Graph3DPluginSettings = {
   showNodeLabels: true,
   showLabelsOnHoverOnly: false,
   labelDistance: 150,
+  alwaysLabelTop: 12,
   labelFadeThreshold: 0.8,
   labelTextSize: 2.5,
   labelTextColorLight: "#000000",

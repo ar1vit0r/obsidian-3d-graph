@@ -332,6 +332,7 @@ export class Graph3DView extends ItemView {
       await this.plugin.saveSettings();
       syncHubButton();
       this.applyHubVisibility();
+      this.applyPinnedLabels();
     });
 
     // Reuses the hub button's styling; state is per view and starts hidden.
@@ -720,6 +721,21 @@ export class Graph3DView extends ItemView {
           await this.plugin.saveSettings();
         }),
     );
+
+    new Setting(container)
+      .setName("Always label top notes")
+      .setDesc("Keep the highest-score (then most-linked) notes labelled. 0 turns it off.")
+      .addSlider((s) =>
+        s
+          .setLimits(0, 40, 1)
+          .setValue(this.settings.alwaysLabelTop)
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            this.settings.alwaysLabelTop = v;
+            await this.plugin.saveSettings();
+            this.updateDisplay();
+          }),
+      );
   }
 
   private renderInteractionSettings(container: HTMLElement) {
@@ -2060,6 +2076,36 @@ export class Graph3DView extends ItemView {
     this.updatePreprocessedGroups();
     this.updateColors();
     this.applyNodeSizes();
+    this.applyPinnedLabels();
+  }
+
+  /** Keep the top notes (by score, then links) labelled even in hover-only mode. */
+  private applyPinnedLabels() {
+    if (!this.labelRenderer) return;
+    const pinned = new Set<number>();
+    const n = this.settings.alwaysLabelTop;
+    if (n > 0) {
+      const degree = (node: GraphNode) => this.linkAdjacencyIndex.get(node.id)?.length ?? 0;
+      const top = this.currentNodes
+        .map((node, i) => ({ node, i }))
+        .filter(({ node }) => node.type === NodeType.File && !this.isHiddenHub(node))
+        .sort(
+          (a, b) =>
+            (b.node.meta?.score ?? -1) - (a.node.meta?.score ?? -1) ||
+            degree(b.node) - degree(a.node),
+        )
+        .slice(0, n);
+      for (const { i } of top) pinned.add(i);
+    }
+    this.labelRenderer.setPinnedLabels(pinned);
+    const stride = this.physicsBridge.positionsStride;
+    if (this.currentPositions.length >= this.currentNodes.length * stride) {
+      this.updateLabels();
+    }
+  }
+
+  private isHiddenHub(node: GraphNode): boolean {
+    return this.settings.hideIndexHub && this.isIndexHub(node);
   }
 
   private applyNodeSizes() {

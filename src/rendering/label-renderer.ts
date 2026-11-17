@@ -88,6 +88,12 @@ export class InstancedLabelRenderer {
   public setHiddenNodes(hidden: ReadonlySet<number>): void {
     this.hiddenLabels = hidden;
   }
+  private pinnedLabels: ReadonlySet<number> = new Set();
+
+  /** Labels that stay visible in hover-only mode and ignore the distance cutoff. */
+  public setPinnedLabels(pinned: ReadonlySet<number>): void {
+    this.pinnedLabels = pinned;
+  }
   private positionsStride: 4 | 3 = 4;
 
   // Frustum & raycast occlusion reusable objects
@@ -428,8 +434,9 @@ export class InstancedLabelRenderer {
         continue;
       }
 
+      const pinned = this.pinnedLabels.has(i);
       if (hoverOnly) {
-        if (label.id !== hoveredNodeId && label.id !== selectedNodeId) {
+        if (label.id !== hoveredNodeId && label.id !== selectedNodeId && !pinned) {
           opacities[i] = 0.0;
           continue;
         }
@@ -443,13 +450,13 @@ export class InstancedLabelRenderer {
       }
 
       const distSq = camPos.distanceToSquared(this.tempNodePos);
-      if (distSq > visibleDistSq) {
+      if (distSq > visibleDistSq && !pinned) {
         opacities[i] = 0.0;
         continue;
       }
 
       let opacity = 1.0;
-      if (distSq > fadeStartDistSq) {
+      if (distSq > fadeStartDistSq && !pinned) {
         const dist = Math.sqrt(distSq);
         opacity = 1.0 - (dist - fadeStartDistance) / (visibleDistance - fadeStartDistance);
       }
