@@ -132,6 +132,10 @@ export class PhysicsBridge {
     this.step();
   }
 
+  public get running(): boolean {
+    return this.isRunning;
+  }
+
   public stop(): void {
     this.isRunning = false;
   }
